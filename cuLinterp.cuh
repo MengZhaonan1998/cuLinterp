@@ -1,48 +1,37 @@
-#include <iostream>
-#include <vector>
+#include <stdio.h>
+#include <stdlib.h>
 
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 #include "cufft.h"
 
-// cuda error-detection function
-#define CHECK_CUDA_ERROR(val) check((val), #val, __FILE__, __LINE__)
-void check(cudaError_t err, const char* const func, const char* const file, int const line)
+// print head elements of an array
+#define PRINT_HEAD_1D(Data, Head) for (int i = 0; i < Head; ++i) i == 0 ? printf(#Data"[0-%d...]: %.4f, ", Head-1, Data[0]): ( i == Head-1 ? printf("%.4f...\n", Data[i]) : printf("%.4f, ", Data[i]))
+#define PRINT_HEAD_ROWWISE_2D(Data, Row, Col, Head1, Head2) for (int i = 0; i < Head1; ++i) for (int j = 0; j < Head2; ++j) j == 0 ? printf(#Data"[%d, 0-%d...]: %.4f, ", i, Head2-1, Data[i*Col]): ( j == Head2 - 1 ? printf("%.4f...\n", Data[i*Col+j]) : printf("%.4f, ", Data[i*Col+j]))
+
+// cuda-error detection function
+#define CHECK_CUDA_ERROR(val) checkCuda((val), #val, __FILE__, __LINE__)
+void checkCuda(cudaError_t err, const char* const func, const char* const file, int const line)
 {
-	if (err != cudaSuccess) {
-		std::cerr << "CUDA Runtime Error at: " << file << ":" << line << std::endl;
-		std::cerr << cudaGetErrorString(err) << " " << func << std::endl;
-		std::exit(EXIT_FAILURE);
-	}
+	if (err != cudaSuccess) 
+		fprintf(stderr, "CUDA Runtime Error at: %s: %s\n %s %s\n", file, line, cudaGetErrorString(err), func);
 }
 
-// cuda error-detection function
-void check(cufftResult_t err, const char* const func, const char* const file, int const line)
+// cufft-error detection function
+#define CHECK_CUFFT_ERROR(val) checkCufft((val), #val, __FILE__, __LINE__)
+void checkCuFFT(cufftResult_t err, const char* const func, const char* const file, int const line)
 {
-	if (err != CUFFT_SUCCESS) {
-		std::cerr << "CUFFT Error " << err << " at: " << file << ":" << line << " " << func << std::endl;
-		std::exit(EXIT_FAILURE);
-	}
+	if (err != CUFFT_SUCCESS) 
+		fprintf(stderr, "cuFFT Runtime Error at: %s: %s\n %s\n", file, line, func);
 }
 
-// cuda error-detection function
+// cuda-last-error detection function
 #define CHECK_LAST_CUDA_ERROR() checkLast(__FILE__, __LINE__)
 void checkLast(const char* const file, int const line)
 {
 	cudaError_t const err{ cudaGetLastError() };
-	if (err != cudaSuccess) {
-		std::cerr << "CUDA Runtime Error at: " << file << ":" << line << std::endl;
-		std::cerr << cudaGetErrorString(err) << std::endl;
-		std::exit(EXIT_FAILURE);
-	}
-}
-
-#define print_arrayElement(h_array, idx) std::cout << #h_array << "["<< idx << "] = " << h_array[idx] << "\n"
-template <class T>
-void printArray1dHead(T* h_array, int head)
-{
-	for (int i = 0; i < head; i++)
-		print_arrayElement(h_array, i);
+	if (err != cudaSuccess)
+		fprintf(stderr, "CUDA Runtime Error at: %s: %s\n %s \n", file, line, cudaGetErrorString(err));
 }
 
 __global__ void interp2dKernel(
@@ -107,34 +96,38 @@ __global__ void interp2dKernel(
 	return;
 }
 
-
-void interp2d_gpu(
-	float* fpOutput, const float* const fpInput,
-	const std::vector<float> sampleXgrid, const std::vector<float> sampleYgrid,
-	const std::vector<float> interpXgrid, const std::vector<float> interpYgrid)
+// float API for 1d linear interpolation running on GPUs 
+void fcuLinterp1d(float* fpOutput, const float* const fpInput,
+const float* const sampleXgrid, const int size_xs,
+const float* const interpXgrid, const int size_xi)
 {
-	int size_ys = sampleYgrid.size();
-	int size_xs = sampleXgrid.size();
-	int size_yi = interpYgrid.size();
-	int size_xi = interpXgrid.size();
+	// TODO...
+}
+
+// float API for 2d linear interpolation running on GPUs 
+void fcuLinterp2d(
+	float* fpOutput, const float* const fpInput,
+	const float* const sampleXgrid, const int size_xs,
+	const float* const sampleYgrid, const int size_ys,
+	const float* const interpXgrid, const int size_xi, 
+	const float* const interpYgrid, const int size_yi)
+{
 	float* d_ygrid_sample; CHECK_CUDA_ERROR(cudaMalloc((void**)&d_ygrid_sample, sizeof(float) * size_ys));
 	float* d_xgrid_sample; CHECK_CUDA_ERROR(cudaMalloc((void**)&d_xgrid_sample, sizeof(float) * size_xs));
 	float* d_ygrid_interp; CHECK_CUDA_ERROR(cudaMalloc((void**)&d_ygrid_interp, sizeof(float) * size_yi));
 	float* d_xgrid_interp; CHECK_CUDA_ERROR(cudaMalloc((void**)&d_xgrid_interp, sizeof(float) * size_xi));
 	float* d_fpOutput; CHECK_CUDA_ERROR(cudaMalloc((void**)&d_fpOutput, sizeof(float) * size_xi * size_yi));
 	float* d_fpInput; CHECK_CUDA_ERROR(cudaMalloc((void**)&d_fpInput, sizeof(float) * size_xs * size_ys));
-	CHECK_CUDA_ERROR(cudaMemcpy(d_ygrid_sample, sampleYgrid.data(), sizeof(float) * size_ys, cudaMemcpyHostToDevice));
-	CHECK_CUDA_ERROR(cudaMemcpy(d_xgrid_sample, sampleXgrid.data(), sizeof(float) * size_xs, cudaMemcpyHostToDevice));
-	CHECK_CUDA_ERROR(cudaMemcpy(d_ygrid_interp, interpYgrid.data(), sizeof(float) * size_yi, cudaMemcpyHostToDevice));
-	CHECK_CUDA_ERROR(cudaMemcpy(d_xgrid_interp, interpXgrid.data(), sizeof(float) * size_xi, cudaMemcpyHostToDevice));
+	CHECK_CUDA_ERROR(cudaMemcpy(d_ygrid_sample, sampleYgrid, sizeof(float) * size_ys, cudaMemcpyHostToDevice));
+	CHECK_CUDA_ERROR(cudaMemcpy(d_xgrid_sample, sampleXgrid, sizeof(float) * size_xs, cudaMemcpyHostToDevice));
+	CHECK_CUDA_ERROR(cudaMemcpy(d_ygrid_interp, interpYgrid, sizeof(float) * size_yi, cudaMemcpyHostToDevice));
+	CHECK_CUDA_ERROR(cudaMemcpy(d_xgrid_interp, interpXgrid, sizeof(float) * size_xi, cudaMemcpyHostToDevice));
 	CHECK_CUDA_ERROR(cudaMemcpy(d_fpInput, fpInput, sizeof(float) * size_xs * size_ys, cudaMemcpyHostToDevice));
 
 	dim3 blockDim(16, 16, 1);
 	dim3 gridDim((size_xi + blockDim.x - 1) / blockDim.x, (size_yi + blockDim.y - 1) / blockDim.y, 1);
-
 	interp2dKernel << <gridDim, blockDim >> > (d_fpOutput, d_fpInput, d_xgrid_sample, size_xs, d_ygrid_sample, size_ys, d_xgrid_interp, size_xi, d_ygrid_interp, size_yi);
-	//std::cout << mIter << " iterations of interp2dKernel took " << (end_t - start_t) / CLOCKS_PER_SEC << " seconds." << std::endl;
-
+	CHECK_LAST_CUDA_ERROR();
 	CHECK_CUDA_ERROR(cudaMemcpy(fpOutput, d_fpOutput, sizeof(float) * size_xi * size_yi, cudaMemcpyDeviceToHost));
 
 	cudaFree(d_ygrid_sample);
