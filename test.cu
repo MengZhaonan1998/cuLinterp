@@ -1,71 +1,72 @@
 #include "cuLinterp.cuh"
 
-// return an evenly spaced 1-d grid of doubles.
-std::vector<float> linspaceV(float first, float last, int len) {
-	std::vector<float> result(len);
+// return an evenly spaced 1-d grid of floats/doubles.
+void linspacef(float* fArray,  float first, float last, int len) {
 	double step = (last - first) / (len - 1);
-	for (int i = 0; i < len; i++) { result[i] = first + i * step; }
-	return result;
+	for (int i = 0; i < len; i++) { fArray[i] = first + i * step; }
 }
 
-inline float fValue1(int i, int j) { return float(1 + i + 1 + j); }
+void linspaced(double* fArray, double first, double last, int len) {
+	double step = (last - first) / (len - 1);
+	for (int i = 0; i < len; i++) { fArray[i] = first + i * step; }
+}
 
-void interp2dGpuTest()
+// customized function generating values to fulfill sample grids
+inline float fValue1(int i, int j) { return float(1 + i + 1 + j); }
+//inline float fValue2(int i, int j) { .... }
+
+// test of fcuLinterp2d
+void fcuLinterp2d_test1()
 {
 	float a = 1.0f;
 	float b = 500.0f;
 	int nSampleSize = 500;
 	int nInterpSize = 5000;
 
-	auto xGrid = linspaceV(a, b, nSampleSize);
-	printArray1dHead(xGrid.data(), 10);
+	// sample grid on x axis
+	float* xGrid = (float*)malloc(nSampleSize * sizeof(float));
+	linspacef(xGrid, a, b, nSampleSize);
+	PRINT_HEAD_1D(xGrid, 10);
+	// sample grid on y axis
+	float* yGrid = (float*)malloc(nSampleSize * sizeof(float));
+	linspacef(yGrid, a, b, nSampleSize);
+	PRINT_HEAD_1D(yGrid, 10);
 
-	auto yGrid = linspaceV(a, b, nSampleSize);
-	printArray1dHead(yGrid.data(), 10);
-
-	auto xInterpGrid = linspaceV(a, b, nInterpSize);
-	printArray1dHead(xInterpGrid.data(), 10);
-
-	auto yInterpGrid = linspaceV(a, b, nInterpSize);
-	printArray1dHead(yInterpGrid.data(), 10);
-
-	float* fpSampleValue = new float[nSampleSize * nSampleSize]{ 0.0f };
-	float* fpInterpValue = new float[nInterpSize * nInterpSize]{ 0.0f };
-
-	for (int i{ 0 }; i < nSampleSize; ++i) {
-		for (int j{ 0 }; j < nSampleSize; ++j) {
+	// interpolation grid on x axis
+	float* xInterpGrid = (float*)malloc(nInterpSize * sizeof(float));
+	linspacef(xInterpGrid, a, b, nInterpSize);
+	PRINT_HEAD_1D(xInterpGrid, 10);
+	// interpolation grid on y axis
+	float* yInterpGrid = (float*)malloc(nInterpSize * sizeof(float));
+	linspacef(yInterpGrid, a, b, nInterpSize);
+	PRINT_HEAD_1D(yInterpGrid, 10);
+	
+	// value arrays of the sample/interpolation grids
+	float* fpSampleValue = (float*)malloc(nSampleSize * nSampleSize * sizeof(float));
+	float* fpInterpValue = (float*)malloc(nInterpSize * nInterpSize * sizeof(float));
+	
+	// initialize values of the sample grid 
+	for (int i{ 0 }; i < nSampleSize; ++i) 
+		for (int j{ 0 }; j < nSampleSize; ++j) 
 			fpSampleValue[i * nSampleSize + j] = fValue1(i, j);
-		}
-	}
+	PRINT_HEAD_ROWWISE_2D(fpSampleValue, nSampleSize, nSampleSize, 5, 5);
 
-	std::cout << "Sample value: \n";
-	for (int i{ 0 }; i < 5; ++i) {
-		for (int j{ 0 }; j < 5; ++j) {
-			std::cout << fpSampleValue[i * nSampleSize + j] << " ";
-		}
-		std::cout << "...\n";
-	}
-	std::cout << "...\n";
+	// float-api 2d linear interpolation on cuda 
+	fcuLinterp2d(fpInterpValue, fpSampleValue, 
+		xGrid, nSampleSize, yGrid, nSampleSize,
+		xInterpGrid, nInterpSize, yInterpGrid, nInterpSize);
+	PRINT_HEAD_ROWWISE_2D(fpInterpValue, nInterpSize, nInterpSize, 5, 5);
 
-	interp2d_gpu(fpInterpValue, fpSampleValue, xGrid, yGrid, xInterpGrid, yInterpGrid);
-
-	std::cout << "Interpolation value: \n";
-	for (int i{ 0 }; i < 5; ++i) {
-		for (int j{ 0 }; j < 5; ++j) {
-			std::cout << fpInterpValue[i * nInterpSize + j] << " ";
-		}
-		std::cout << "...\n";
-	}
-	std::cout << "...\n";
-
-	delete[] fpSampleValue;
-	delete[] fpInterpValue;
+	free(xGrid);
+	free(yGrid);
+	free(xInterpGrid);
+	free(yInterpGrid);
+	free(fpSampleValue);
+	free(fpInterpValue);
 }
-
 
 int main() 
 {
-	interp2dGpuTest();
-
+	fcuLinterp2d_test1();
 	return 0;
 }
