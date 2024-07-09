@@ -104,7 +104,7 @@ const float* const interpXgrid, const int size_xi)
 	// TODO...
 }
 
-// float API for 2d linear interpolation running on GPUs 
+// float API for 2d linear interpolation running on NVIDIA GPUs through CUDA 
 void fcuLinterp2d(
 	float* fpOutput, const float* const fpInput,
 	const float* const sampleXgrid, const int size_xs,
@@ -112,6 +112,13 @@ void fcuLinterp2d(
 	const float* const interpXgrid, const int size_xi, 
 	const float* const interpYgrid, const int size_yi)
 {
+	/*
+	----------> x(column)  ----------> x(column)
+	|                      |
+	| SampleGrid   =====>> | InterpolationGrid
+	|                      |
+	y(row)                 y(row)
+	*/
 	float* d_ygrid_sample; CHECK_CUDA_ERROR(cudaMalloc((void**)&d_ygrid_sample, sizeof(float) * size_ys));
 	float* d_xgrid_sample; CHECK_CUDA_ERROR(cudaMalloc((void**)&d_xgrid_sample, sizeof(float) * size_xs));
 	float* d_ygrid_interp; CHECK_CUDA_ERROR(cudaMalloc((void**)&d_ygrid_interp, sizeof(float) * size_yi));
@@ -136,6 +143,80 @@ void fcuLinterp2d(
 	cudaFree(d_xgrid_interp);
 	cudaFree(d_fpOutput);
 	cudaFree(d_fpInput);
+
+	return;
+}
+
+// float API for 2d linear interpolation running on CPUs
+void fLinterp2d(
+	float* fpOutput, const float* const fpInput,
+	const float* const sampleXgrid, const int size_xs,
+	const float* const sampleYgrid, const int size_ys,
+	const float* const interpXgrid, const int size_xi,
+	const float* const interpYgrid, const int size_yi)
+{
+	/*
+	----------> x(column)  ----------> x(column)
+	|                      |
+	| SampleGrid   =====>> | InterpolationGrid
+	|                      |
+	y(row)                 y(row)
+	*/
+
+	// We assume that all grids are even! 
+	// i.e. This function only works for even grids;
+	float step_ys = sampleYgrid[1] - sampleYgrid[0];
+	float step_xs = sampleXgrid[1] - sampleXgrid[0];
+
+	int yi, xj, yi_1, xj_1;
+	float u, v, z, t;
+
+	for (int i{ 0 }; i < size_yi; ++i)
+	{
+		for (int j{ 0 }; j < size_xi; ++j)
+		{
+			if (interpYgrid[i] < sampleYgrid[0] || interpYgrid[i] > sampleYgrid[size_ys - 1] ||
+				interpXgrid[j] < sampleXgrid[0] || interpXgrid[j] > sampleXgrid[size_xs - 1])
+			{
+				fpOutput[i * size_xi + j] = 0.0f;
+				continue;
+			}
+
+			yi = floor((interpYgrid[i] - sampleYgrid[0]) / step_ys);
+			xj = floor((interpXgrid[j] - sampleXgrid[0]) / step_xs);
+			yi_1 = yi + 1;
+			xj_1 = xj + 1;
+
+			//			printf("i, j = %d, %d\n", i, j);
+			//			printf("yi, xj = %d, %d\n", yi, xj);
+
+			if (yi == size_ys - 1) {
+				v = 0;
+				yi_1 = 0; // verbose
+			}
+			else {
+				v = (interpYgrid[i] - sampleYgrid[yi]) / (sampleYgrid[yi_1] - sampleYgrid[yi]);
+			}
+
+			if (xj == size_xs - 1) {
+				u = 0;
+				xj_1 = 0; // verbose
+			}
+			else {
+				u = (interpXgrid[j] - sampleXgrid[xj]) / (sampleXgrid[xj_1] - sampleXgrid[xj]);
+			}
+
+			t = fpInput[yi * size_xs + xj];
+			if (v <= u) {
+				z = t + u * (fpInput[yi * size_xs + xj_1] - t) + v * (fpInput[yi_1 * size_xs + xj_1] - fpInput[yi * size_xs + xj_1]);
+			}
+			else {
+				z = t + v * (fpInput[yi_1 * size_xs + xj] - t) + u * (fpInput[yi_1 * size_xs + xj_1] - fpInput[yi_1 * size_xs + xj]);
+			}
+
+			fpOutput[i * size_xi + j] = z;
+		}
+	}
 
 	return;
 }
