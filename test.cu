@@ -16,7 +16,7 @@ inline float fValue1(int i, int j) { return float(1 + i + 1 + j); }
 //inline float fValue2(int i, int j) { .... }
 
 // test of fcuLinterp2d
-void fcuLinterp2d_test1()
+void fLinterp2d_test()
 {
 	float a = 1.0f;
 	float b = 500.0f;
@@ -43,30 +43,59 @@ void fcuLinterp2d_test1()
 	
 	// value arrays of the sample/interpolation grids
 	float* fpSampleValue = (float*)malloc(nSampleSize * nSampleSize * sizeof(float));
-	float* fpInterpValue = (float*)malloc(nInterpSize * nInterpSize * sizeof(float));
+	float* fpInterpValue_cpuResult = (float*)malloc(nInterpSize * nInterpSize * sizeof(float));
+	float* fpInterpValue_gpuResult = (float*)malloc(nInterpSize * nInterpSize * sizeof(float));
 	
 	// initialize values of the sample grid 
 	for (int i{ 0 }; i < nSampleSize; ++i) 
 		for (int j{ 0 }; j < nSampleSize; ++j) 
 			fpSampleValue[i * nSampleSize + j] = fValue1(i, j);
+	printf("\nInput: Elements of the sample grid (xGrid→, yGrid↓):\n");
 	PRINT_HEAD_ROWWISE_2D(fpSampleValue, nSampleSize, nSampleSize, 5, 5);
 
-	// float-api 2d linear interpolation on cuda 
-	fcuLinterp2d(fpInterpValue, fpSampleValue, 
+	// float-api 2d linear interpolation on CPU
+	fLinterp2d(fpInterpValue_cpuResult, fpSampleValue,
 		xGrid, nSampleSize, yGrid, nSampleSize,
 		xInterpGrid, nInterpSize, yInterpGrid, nInterpSize);
-	PRINT_HEAD_ROWWISE_2D(fpInterpValue, nInterpSize, nInterpSize, 5, 5);
+	printf("\nfLinterp2d Output: Elements of the interpolation grid (xInterpGrid→, yInterpGrid↓):\n");
+	PRINT_HEAD_ROWWISE_2D(fpInterpValue_cpuResult, nInterpSize, nInterpSize, 5, 5);
+
+	// float-api 2d linear interpolation on CPU
+	fcuLinterp2d(fpInterpValue_gpuResult, fpSampleValue,
+		xGrid, nSampleSize, yGrid, nSampleSize,
+		xInterpGrid, nInterpSize, yInterpGrid, nInterpSize);
+	printf("\nfcuLinterp2d Output: Elements of the interpolation grid (xInterpGrid→, yInterpGrid↓):\n");
+	PRINT_HEAD_ROWWISE_2D(fpInterpValue_gpuResult, nInterpSize, nInterpSize, 5, 5);
+
+	// compare the results of fcuLinterp2d and fLinterp2d
+	float maxv = 0.0f;
+	float diff = 0.0f;
+	for (int i = 0; i < nInterpSize * nInterpSize; ++i) {
+		diff = abs(fpInterpValue_gpuResult[i] - fpInterpValue_cpuResult[i]);
+		if (diff > maxv)
+			maxv = diff;
+	}
+	printf("\nMax difference between results of fcuLinterp2d and fLinterp2d: %.4f\n", maxv);
 
 	free(xGrid);
 	free(yGrid);
 	free(xInterpGrid);
 	free(yInterpGrid);
 	free(fpSampleValue);
-	free(fpInterpValue);
+	free(fpInterpValue_cpuResult);
+	free(fpInterpValue_gpuResult);
+}
+
+void fLinterp1d_test() 
+{
+
 }
 
 int main() 
 {
-	fcuLinterp2d_test1();
+	fLinterp2d_test();
+	
+	fLinterp1d_test();
+
 	return 0;
 }
