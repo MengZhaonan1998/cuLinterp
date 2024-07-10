@@ -147,6 +147,35 @@ void fcuLinterp2d(
 	return;
 }
 
+// float API for 1d linear interpolation running on CPUs
+void fLinterp1d(
+	float* fpOutput, const float* const fpInput,
+	const float* const sampleXgrid, const int size_xs,
+	const float* const interpXgrid, const int size_xi)
+{   
+	// Sample x Grid =====>> Interpolation x grid  
+
+	// We assume that all grids are even! 
+	// i.e. This function only works for even grids;
+	float step_xs = sampleXgrid[1] - sampleXgrid[0];
+	int xi,  xi_1;
+	float a, b;
+	for (int i{ 0 }; i < size_xi; ++i) 
+	{
+		if (interpXgrid[i] < sampleXgrid[0] || interpXgrid[i] > sampleXgrid[size_xs - 1])
+		{
+			fpOutput[i] = 0.0f;
+			continue;
+		}
+
+		xi = floor((interpXgrid[i] - sampleXgrid[0]) / step_xs);
+		xi_1 = xi + 1;
+		a = (fpInput[xi_1] - fpInput[xi]) / step_xs;
+		b = fpInput[xi] - a * sampleXgrid[xi];
+		fpOutput[i] = a * interpXgrid[i] + b;
+	}
+}
+
 // float API for 2d linear interpolation running on CPUs
 void fLinterp2d(
 	float* fpOutput, const float* const fpInput,
